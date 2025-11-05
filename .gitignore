@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+
+# Dataset
+backend/chest_xray/
+
+# Model
+backend/model/pneumonia_model.h5
+
+# React
+frontend/node_modules/
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
