@@ -181,7 +181,7 @@ const UploadForm = () => {
       try {
         // --- This is the API Call ---
         // This is your live Hugging Face API endpoint
-       const GRADIO_API_URL = "https://prabhat93-pneumonia-detector-api.hf.space/api/predict";
+       const GRADIO_API_URL = "https://prabhat93-pneumonia-detector-api.hf.space/run/predict";
 
         // 3. Send a JSON payload in the format Gradio expects
         const res = await axios.post(GRADIO_API_URL, {
