@@ -160,6 +160,7 @@ const UploadForm = () => {
     }
   };
 
+  // NEW handleUpload function for Gradio API
   const handleUpload = async () => {
     if (!file) {
       setError("Please select an X-ray image first.");
@@ -170,18 +171,39 @@ const UploadForm = () => {
     setResult("");
     setError("");
 
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await axios.post("http://127.0.0.1:5000/predict", formData);
-      setResult(res.data.result);
-    } catch (err) {
-      console.error("Error uploading file:", err);
-      setError("An error occurred. Is the backend server running?");
-    }
+    // 1. Create a FileReader to read the file
+    const reader = new FileReader();
     
-    setLoading(false);
+    // 2. This runs when the file is finished reading
+    reader.onload = async (e) => {
+      const base64Image = e.target.result; // This is the Base64 data URL
+
+      try {
+        // --- This is the API Call ---
+        // This is your live Hugging Face API endpoint
+        const GRADIO_API_URL = "https://prabhat993-pneumonia-detector-api.hf.space/run/predict";
+
+        // 3. Send a JSON payload in the format Gradio expects
+        const res = await axios.post(GRADIO_API_URL, {
+          data: [
+            base64Image  // The Base64 string is in the 'data' array
+          ]
+        });
+        
+        // 4. Get the result from the Gradio response
+        // The prediction is in res.data.data[0]
+        setResult(res.data.data[0]);
+
+      } catch (err) {
+        console.error("Error uploading file:", err);
+        setError("An error occurred. Is the backend server running?");
+      }
+      
+      setLoading(false); // Hide loading message
+    };
+
+    // 5. Tell the reader to read the file as a Base64 string
+    reader.readAsDataURL(file);
   };
 
   const getResultStyle = () => {
