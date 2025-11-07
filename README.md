@@ -35,3 +35,35 @@ Follow these steps to set up and run the project on your own machine.
 ```sh
 git clone [https://github.com/Prabhat993/pneumonia-detector-app.git](https://github.com/Prabhat993/pneumonia-detector-app.git)
 cd pneumonia-detector
+
+
+Here are the two scripts you need to run on your local computer to start the project for development.
+
+You will need two separate terminals running at the same time.
+
+⚙️ Backend (Flask API)
+In your first terminal, you'll start the Flask server.
+
+PowerShell
+
+# 1. Navigate to your backend folder
+cd C:\Users\Prabhat\Desktop\pneumonia-detector\backend
+
+# 2. Activate your Python virtual environment
+.\venv\Scripts\Activate
+
+# 3. Run the Python app
+python app.py
+This will start your backend server, which will be listening at: http://127.0.0.1:5000
+
+⚛️ Frontend (React App)
+In a second terminal, you'll start the React app.
+
+PowerShell
+
+# 1. Navigate to your frontend folder
+cd C:\Users\Prabhat\Desktop\pneumonia-detector\frontend
+
+# 2. Start the React development server
+npm start
+This will automatically open your web browser to your app at: http://localhost:3000
