@@ -171,41 +171,28 @@ const UploadForm = () => {
     setResult("");
     setError("");
 
-    // 1. Create a FileReader to read the file
-    const reader = new FileReader();
-    
-    // 2. This runs when the file is finished reading
-    reader.onload = async (e) => {
-      const base64Image = e.target.result; // This is the Base64 data URL
+    // 1. We are using FormData again, which is correct for Flask
+    const formData = new FormData();
+    formData.append("file", file); // 'file' must match request.files['file'] in Flask
 
-      try {
-        // --- This is the API Call ---
-        // This is your live Hugging Face API endpoint
-       const GRADIO_API_URL = "https://prabhat93-pneumonia-detector-api.hf.space/api/predict";
+    try {
+      // --- 2. This is the API Call ---
+      // !! IMPORTANT: Change this URL to your NEW Docker Space URL !!
+      const API_URL = "https://prabhat93-pneumonia-docker-api.hf.space/predict";
+      // (Notice it ends in /predict, as defined in our app.py)
 
-        // 3. Send a JSON payload in the format Gradio expects
-        const res = await axios.post(GRADIO_API_URL, {
-          data: [
-            base64Image  // The Base64 string is in the 'data' array
-          ]
-        });
-        
-        // 4. Get the result from the Gradio response
-        // The prediction is in res.data.data[0]
-        setResult(res.data.data[0]);
-
-      } catch (err) {
-        console.error("Error uploading file:", err);
-        setError("An error occurred. Is the backend server running?");
-      }
+      const res = await axios.post(API_URL, formData);
       
-      setLoading(false); // Hide loading message
-    };
+      // 3. Get the result from the simple JSON response
+      setResult(res.data.result);
 
-    // 5. Tell the reader to read the file as a Base64 string
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Error uploading file:", err);
+      setError("An error occurred. Is the backend server running?");
+    }
+    
+    setLoading(false); // Hide loading message
   };
-
   const getResultStyle = () => {
     let color = '#333';
     if (result.includes("Pneumonia")) {
