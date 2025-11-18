@@ -1,91 +1,100 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.layers import Dense, Flatten, Dropout, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.applications import VGG16
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import os
+from collections import Counter
 
 # --- 1. Define Paths ---
-# Make sure this path matches where you put the dataset
-# Path to dataset
 train_dir = 'chest_xray/train'
 test_dir = 'chest_xray/test'
 
 # --- 2. Image Preprocessing ---
-# 'ImageDataGenerator' automatically reads images from folders and prepares them 
-# for the model. 'rescale=1./255' normalizes pixel values from 0-255 to 0-1,
-# which helps the model train better.
-# 'validation_split=0.2' tells the generator to reserve 20% of data for validation
-
-train_gen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
-
-# 'flow_from_directory' links the generator to our image folders
-# Get the 80% of images for training
-train_data = train_gen.flow_from_directory(
-    train_dir,
-    target_size=(150, 150),  # Resize all images to 150x150
-    batch_size=32,
-    class_mode='binary',  # We have two classes: 'normal' and 'pneumonia'
-    subset='training'  # Specify this is the training subset
+# VGG16 expects 224x224 usually, but 150x150 works too.
+# We add aggressive augmentation to prevent overfitting.
+train_gen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2,
+    rotation_range=15,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    shear_range=0.1,
+    zoom_range=0.1,
+    horizontal_flip=True,
+    fill_mode='nearest'
 )
 
-# Get the 20% of images for validation
-val_data = train_gen.flow_from_directory(
-    train_dir,  # Note: We are using train_dir again
+# --- 3. Create Data Generators ---
+train_data = train_gen.flow_from_directory(
+    train_dir,
     target_size=(150, 150),
     batch_size=32,
     class_mode='binary',
-    subset='validation'  # Specify this is the validation subset
+    subset='training'
 )
 
-# --- 3. Build the CNN Model ---
-# This is the "brain's" architecture. It's a stack of layers.
+val_data = train_gen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='binary',
+    subset='validation'
+)
 
-model = Sequential([
-    # Layer 1: Find simple features (edges, corners)
-    Conv2D(32, (3,3), activation='relu', input_shape=(150,150,3)),
-    MaxPooling2D(2,2),
-    
-    # Layer 2: Find more complex features
-    Conv2D(64, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
-    
-    # Layer 3: Find even more complex features
-    Conv2D(128, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
-    
-    # --- 4. Classifier Head ---
-    # Flatten the 3D features into a 1D vector
-    Flatten(),
-    
-    # A standard "brain" layer
-    Dense(512, activation='relu'),
-    Dropout(0.5), # Helps prevent overfitting
-    
-    # Output Layer: 'sigmoid' gives a probability (0 to 1)
-    # 0 = Normal, 1 = Pneumonia
-    Dense(1, activation='sigmoid')
-])
+# --- 4. Calculate Class Weights (Crucial for Imbalance) ---
+counter = Counter(train_data.classes)
+total = len(train_data.classes)
+# Increase penalty for Normal class slightly to ensure it learns them well
+weight_for_0 = (1 / counter[0]) * (total / 2.0) * 1.2  # Slight boost to Normal
+weight_for_1 = (1 / counter[1]) * (total / 2.0)
 
-# --- 5. Compile the Model ---
-# Tell the model how to learn
+class_weight = {0: weight_for_0, 1: weight_for_1}
+
+print(f"Weights -> Normal: {weight_for_0:.2f}, Pneumonia: {weight_for_1:.2f}")
+
+# --- 5. Build Model with Transfer Learning (VGG16) ---
+# Load VGG16 model without the top classification layers
+base_model = VGG16(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
+
+# Freeze the base model layers so we don't destroy pre-learned features
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Add our own custom layers on top
+x = Flatten()(base_model.output)
+x = Dense(512, activation='relu')(x)
+x = Dropout(0.5)(x) # Dropout helps prevent overfitting
+output = Dense(1, activation='sigmoid')(x)
+
+model = Model(inputs=base_model.input, outputs=output)
+
+# --- 6. Compile ---
 model.compile(
-    optimizer='adam', 
-    loss='binary_crossentropy', # Good for binary (0 or 1) problems
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001), # Lower learning rate for fine-tuning
+    loss='binary_crossentropy', 
     metrics=['accuracy']
 )
 
-# --- 6. Train the Model ---
-# 'fit' starts the training process
+# --- 7. Callbacks ---
+# Stop training if validation loss doesn't improve for 3 epochs
+early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+# Reduce learning rate if improvement stalls
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=2, min_lr=0.00001)
+
+# --- 8. Train ---
+print("Starting training with VGG16...")
 model.fit(
     train_data,
-    epochs=5,  # 5 passes over the entire dataset
-    validation_data=val_data
+    epochs=10, # More epochs, but early_stop will prevent overtraining
+    validation_data=val_data,
+    class_weight=class_weight,
+    callbacks=[early_stop, reduce_lr]
 )
 
-# --- 7. Save the Trained Model ---
-# Create a 'model' directory if it doesn't exist
+# --- 9. Save ---
 os.makedirs('model', exist_ok=True)
-# Save the final trained model
 model.save('model/pneumonia_model.h5')
 
-print("✅ Model saved successfully!")
+print("✅ High-accuracy VGG16 model saved successfully!")
